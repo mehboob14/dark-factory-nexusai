@@ -7,3 +7,5 @@ docker build -t pocketful-s1 . && docker run --rm -e PORT=8080 -p 8080:8080 pock
 ```
 
 The service listens on `http://0.0.0.0:8080` (override with `-e PORT=` and matching `-p`).
+
+No manual setup beyond the command above.
