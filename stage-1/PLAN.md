@@ -77,3 +77,5 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 15:12 UTC+5 — tester suite assertion fixes at `a9286d1` (acceptance/ only). W13 still waiting on a new product hash. Not `a177261` / `60297a7` / `7edc9f6`.
 - 15:14 UTC+5 — implementer resume cited a9286d1/7edc9f6 as done. `7eda846` is `__init__.py` only. store.py still (user_id, key). Told them to edit store.py and commit.
 - 15:23 UTC+5 — implementer resubmitted `7eda846` isolated 147/147. `772dbbe` empty. store.py still two-part key. Rejected again.
+- 15:41 UTC+5 — implementer `3b0deb2` keys idempotency by (user_id, key, method, path). `7bf0ce1` adds sequence tie-break for same-second lists, and returns 400 malformed_request for string/bool fixture balances. Isolated 147/147 claimed stage 1 at `7bf0ce1`. R41/R40/R19 still require 422 validation_failed for those balances. Not W14 yet.
+- 15:50 UTC+5 — tester re-announced suite `ad9b010` (already logged at 13:37). Latest suite commit remains `a9286d1`. W12 closed. Tester parked. Reviewer told this is not W14.
