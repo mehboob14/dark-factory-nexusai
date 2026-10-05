@@ -228,11 +228,33 @@ R156. Concurrent identical idempotent writes obey R65. [§7]
 
 ---
 
-## Explicitly not in stage 1
+## Stage 2 (Browser UI and Authorizations)
 
-R157. No browser UI, no HTML routes, no `data-testid` contract. [stage-2]
-R158. No authorizations, captures, voids, holds, `available`, `held`, or `total` fields. `GET /me` `balance` is the wallet total. Insufficient-funds checks use that balance. [stage-2]
-R159. No statements, corrections, `as_of`, `known_at`, revisions, refunds, or correction batches. [stage-3] [stage-4]
+R157. Browser routes: `/` (home), `/requests`, `/split`, `/signup`, `/login` return HTML for `Accept: text/html`. JSON APIs on the same paths return data when header is absent. [stage-2 §UI]
+R158. Browser must include `data-testid` attributes per stage-2 spec table for integration testing. All routes responsive (375px–desktop), no horizontal scroll, sufficient contrast, visible labels, apparent focus. [stage-2 §Product]
+R159. `GET /me` returns `{balance, total, available, held, ...}`. `balance` always equals `total`. `available = total − held` (never negative). `held` is sum of open authorizations. [stage-2 §Wallet]
+
+R160. `POST /authorizations` (idempotent write): caller is payer. Body: `to_handle`, `amount`, optional `note` (default `""`), optional `visibility` (default `"public"`). Requires `Idempotency-Key`. [stage-2 §API]
+R161. Authorization success `201`: `{authorization_id, from_user_id, from_handle, to_user_id, to_handle, amount, captured_amount, status:"open", expires_at, created_at, ...}`. `expires_at = created_at + authorization_ttl_seconds`. [stage-2 §API]
+R162. Authorization errors: caller's `available < amount` → `409 insufficient_funds`; `amount` invalid → `422 validation_failed`; `to_handle` is caller → `422 self_payment`; unknown handle → `404 not_found`. [stage-2 §API]
+R163. `POST /authorizations/{id}/capture` (idempotent write, receiver only, requires `Idempotency-Key`): Body `{amount}` (optional, defaults to remaining). Returns `201` with created payment (authorization_id set, request_id: null). Captures remainder and releases held funds. [stage-2 §API]
+R164. Capture errors: authorization not `open` or expired → `409 authorization_not_open` / `authorization_expired`; `amount > remaining` → `422 capture_exceeds_authorization`; not receiver → `403 forbidden`; unknown → `404 not_found`. [stage-2 §API]
+R165. `POST /authorizations/{id}/void` (payer only, no idempotency key): `200` with authorization `status:"voided"`. Voiding already-voided is `200`. `captured`/`expired` → `409 authorization_not_open`. [stage-2 §API]
+R166. `GET /authorizations` (caller parties only): Filter by `direction` (incoming/outgoing/absent) and `status` (open/captured/voided/expired/absent). Pagination: `limit` (1..200, default 50), `offset` (≥ 0, default 0). Response: `{authorizations:[...], has_more}`. [stage-2 §API]
+R167. Authorization holds: every open authorization (including seeded) reserves money. `available = total − sum(open_holds)`. Holds do not move money; payments are immediate; captures move held funds. [stage-2 §Model]
+R168. Fixture: `authorization_ttl_seconds` (positive integer, default 600). Optional `authorizations` array. Seeded authorization: `id`, `from_user_id`, `to_user_id`, `amount`, `status` (open/captured/voided/expired), `expires_at` (required, absolute time). Seeded `balance` already reflects open holds. [stage-2 §Model]
+R169. Fixture validation: sum of seeded open-hold amounts ≤ user's `balance`, else `422 validation_failed` on reset. [stage-2 §Model]
+R170. `POST /payments` still immediate (no hold step required). Insufficient-funds now checks `available` instead of `balance`. With no holds, behavior unchanged. [stage-2 §Model]
+R171. `POST /requests/{id}/pay` checks payer's `available` for insufficient-funds. All other request operations unchanged. [stage-2 §Model]
+R172. Payments created via capture carry `authorization_id` set. Ordinary payments carry `authorization_id: null`. [stage-2 §API]
+R173. Export/import preserve `authorizations` array unchanged. Browser session remains valid after import. Idempotency records, tokens, and seeded state all preserved (R149–R152 still apply). [stage-2 §Model]
+R174. Browser decimal input (pay, request, split amounts): accepts decimal string (e.g. `15.00`), submits minor units. `15.5` with `minor_units: 2` submits `1550`. Nonnumeric or excess decimals show error without sending request. [stage-2 §UI]
+R175. Form state preservation: after successful payment/request/split, form values retained. Submitting unchanged form again with same idempotency key replays (does not send payment). Changing a field clears the key; next submit is a new request. [stage-2 §UI]
+R176. Concurrent authorization: operations serialize so holds never exceed `total`, captures never exceed authorized amount, and closure rules hold atomically. [stage-2 §Concurrency]
+
+## Explicitly not in stage 2 or earlier
+
+R177. No statements, corrections, `as_of`, `known_at`, revisions, refunds, or correction batches. [stage-3] [stage-4]
 
 ---
 

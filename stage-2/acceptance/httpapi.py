@@ -146,3 +146,21 @@ def expect_id(value: Any) -> None:
 
 def dumped(resp: httpx.Response) -> Any:
     return json.loads(resp.text)
+
+
+def same_json(a: Any, b: Any) -> bool:
+    return json.dumps(a, sort_keys=True, separators=(",", ":")) == json.dumps(
+        b, sort_keys=True, separators=(",", ":")
+    )
+
+
+def walk_contains(obj: Any, needle: str) -> bool:
+    if isinstance(obj, str):
+        return needle in obj
+    if isinstance(obj, dict):
+        return any(walk_contains(v, needle) for v in obj.values()) or any(
+            needle in str(k) for k in obj
+        )
+    if isinstance(obj, list):
+        return any(walk_contains(v, needle) for v in obj)
+    return False

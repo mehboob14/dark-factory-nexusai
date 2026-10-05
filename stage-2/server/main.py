@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 
 from server.store import store
 from server.util import note_len_ok, parse_amount, parse_query_int
@@ -36,6 +36,10 @@ def err(status: int, code: str, message: str | None = None) -> JSONResponse:
 
 def ok_json(status: int, body: Any) -> JSONResponse:
     return JSONResponse(status_code=status, content=body, media_type=JSON_CT)
+
+
+def html_response(content: str, status: int = 200) -> HTMLResponse:
+    return HTMLResponse(content=content, status_code=status)
 
 
 def parse_bearer(request: Request) -> str | None:
@@ -541,6 +545,317 @@ async def post_settlements(request: Request) -> JSONResponse:
         if key:
             store.save_idempotency(uid, key, "POST", "/settlements", body, resp, 201)
         return ok_json(201, resp)
+
+
+@app.get("/")
+async def home(request: Request) -> Response:
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        html = """
+<html>
+<head><title>Pocketful</title></head>
+<body>
+<h1>Wallet</h1>
+<p data-testid="wallet-balance" data-amount="0">0.00 EUR</p>
+<p data-testid="wallet-available" data-amount="0">0.00 EUR</p>
+<h2>Pay</h2>
+<form id="pay-form">
+    <input data-testid="pay-handle" type="text" placeholder="Handle" />
+    <input data-testid="pay-amount" type="text" placeholder="Amount" />
+    <input data-testid="pay-note" type="text" placeholder="Note" />
+    <select data-testid="pay-visibility"><option value="public">public</option><option value="private">private</option></select>
+    <button data-testid="pay-submit" type="submit">Pay</button>
+    <div data-testid="pay-error" style="display:none;"></div>
+</form>
+<h2>Request</h2>
+<form id="request-form">
+    <input data-testid="request-handle" type="text" placeholder="Handle" />
+    <input data-testid="request-amount" type="text" placeholder="Amount" />
+    <input data-testid="request-note" type="text" placeholder="Note" />
+    <button data-testid="request-submit" type="submit">Request</button>
+    <div data-testid="request-error" style="display:none;"></div>
+</form>
+<h2>Activity</h2>
+<div data-testid="activity-list"></div>
+<div data-testid="empty-activity">No activity</div>
+<div data-testid="current-user" style="display:none;"></div>
+<button data-testid="logout-button" style="display:none;">Logout</button>
+</body>
+</html>
+"""
+        return html_response(html)
+    uid = auth_user_id(request)
+    if uid is None:
+        return err(401, "unauthenticated")
+    with store._lock:
+        user = store.users[uid]
+        return ok_json(200, store.user_public(user))
+
+
+@app.get("/requests")
+async def requests_page(request: Request) -> Response:
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        html = """
+<html>
+<head><title>Requests</title></head>
+<body>
+<h1>Requests</h1>
+<h2>Incoming</h2>
+<div data-testid="incoming-list"></div>
+<h2>Outgoing</h2>
+<div data-testid="outgoing-list"></div>
+<div data-testid="empty-requests">No requests</div>
+<div data-testid="request-error" style="display:none;"></div>
+</body>
+</html>
+"""
+        return html_response(html)
+    uid = auth_user_id(request)
+    if uid is None:
+        return err(401, "unauthenticated")
+    direction = request.query_params.get("direction")
+    status = request.query_params.get("status")
+    limit = parse_query_int(request.query_params.get("limit"))
+    offset = parse_query_int(request.query_params.get("offset"))
+    if limit is None or offset is None:
+        return err(422, "validation_failed")
+    if limit == 0:
+        limit = 50
+    if offset == 0:
+        offset = 0
+    if limit < 1 or limit > 200:
+        return err(422, "validation_failed")
+    if offset < 0:
+        return err(422, "validation_failed")
+    if direction and direction not in ("incoming", "outgoing"):
+        return err(422, "validation_failed")
+    if status and status not in ("pending", "paid", "declined", "cancelled"):
+        return err(422, "validation_failed")
+    with store._lock:
+        result = store.list_requests(uid, direction, status, limit, offset)
+    return ok_json(200, result)
+
+
+@app.get("/split")
+async def split_page(request: Request) -> Response:
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        html = """
+<html>
+<head><title>Split</title></head>
+<body>
+<h1>Split</h1>
+<form id="split-form">
+    <input data-testid="split-amount" type="text" placeholder="Amount" />
+    <input data-testid="split-handles" type="text" placeholder="Handles (comma-separated)" />
+    <input data-testid="split-note" type="text" placeholder="Note" />
+    <button data-testid="split-submit" type="submit">Split</button>
+    <div data-testid="split-preview"></div>
+    <div data-testid="split-error" style="display:none;"></div>
+</form>
+</body>
+</html>
+"""
+        return html_response(html)
+    return err(404, "not_found")
+
+
+@app.get("/signup")
+async def signup_page(request: Request) -> Response:
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        html = """
+<html>
+<head><title>Signup</title></head>
+<body>
+<h1>Sign Up</h1>
+<form id="signup-form">
+    <input data-testid="signup-email" type="email" placeholder="Email" />
+    <input data-testid="signup-password" type="password" placeholder="Password" />
+    <input data-testid="signup-display-name" type="text" placeholder="Display Name" />
+    <button data-testid="signup-submit" type="submit">Sign Up</button>
+    <div data-testid="auth-error" style="display:none;"></div>
+</form>
+</body>
+</html>
+"""
+        return html_response(html)
+    return err(404, "not_found")
+
+
+@app.get("/login")
+async def login_page(request: Request) -> Response:
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        html = """
+<html>
+<head><title>Login</title></head>
+<body>
+<h1>Log In</h1>
+<form id="login-form">
+    <input data-testid="login-email" type="email" placeholder="Email" />
+    <input data-testid="login-password" type="password" placeholder="Password" />
+    <button data-testid="login-submit" type="submit">Log In</button>
+    <div data-testid="auth-error" style="display:none;"></div>
+</form>
+<div data-testid="current-user" style="display:none;"></div>
+<div data-testid="current-handle" style="display:none;"></div>
+</body>
+</html>
+"""
+        return html_response(html)
+    return err(404, "not_found")
+
+
+@app.post("/authorizations")
+async def post_authorizations(request: Request) -> JSONResponse:
+    uid = auth_user_id(request)
+    if uid is None:
+        return err(401, "unauthenticated")
+    body, parse_err = await read_json_object(request)
+    if parse_err:
+        return err(400, parse_err)
+    assert body is not None
+    key = idempotency_key(request)
+
+    def run():
+        verr, fields = validate_payment_body(body)
+        if verr == "malformed_request":
+            return err(400, "malformed_request")
+        if verr:
+            return err(422, verr)
+        assert fields is not None
+        code, resp = store.create_authorization(
+            uid, fields["to_handle"], fields["amount"], fields["note"], fields["visibility"]
+        )
+        if code == "self_payment":
+            return err(422, "self_payment")
+        if code == "not_found":
+            return err(404, "not_found")
+        if code == "insufficient_funds":
+            return err(409, "insufficient_funds")
+        return 201, resp
+
+    with store._lock:
+        code, rec, is_new = store.resolve_idempotency(uid, "POST", "/authorizations", key, body, True)
+        if code == "missing_idempotency_key":
+            return err(400, "missing_idempotency_key")
+        if code == "validation_failed":
+            return err(422, "validation_failed")
+        if code == "idempotency_key_reuse":
+            return err(409, "idempotency_key_reuse")
+        if code == "replay" and rec:
+            return ok_json(200, rec.response)
+        result = run()
+        if isinstance(result, JSONResponse):
+            return result
+        status, resp_body = result
+        if status == 201 and key:
+            store.save_idempotency(uid, key, "POST", "/authorizations", body, resp_body, 201)
+        return ok_json(status, resp_body)
+
+
+@app.post("/authorizations/{auth_id}/capture")
+async def capture_authorization(auth_id: str, request: Request) -> JSONResponse:
+    uid = auth_user_id(request)
+    if uid is None:
+        return err(401, "unauthenticated")
+    body, parse_err = await read_json_object(request)
+    if parse_err:
+        return err(400, parse_err)
+    assert body is not None
+    key = idempotency_key(request)
+
+    def run():
+        cap_amount_raw = body.get("amount")
+        if cap_amount_raw is not None:
+            cap_amount = parse_amount(cap_amount_raw)
+            if cap_amount is None or cap_amount < 1 or cap_amount > 1_000_000_000:
+                return err(422, "validation_failed")
+        else:
+            cap_amount = None
+
+        code, resp = store.capture_authorization(auth_id, uid, cap_amount)
+        if code == "not_found":
+            return err(404, "not_found")
+        if code == "forbidden":
+            return err(403, "forbidden")
+        if code == "authorization_not_open":
+            return err(409, "authorization_not_open")
+        if code == "authorization_expired":
+            return err(409, "authorization_expired")
+        if code == "capture_exceeds_authorization":
+            return err(422, "capture_exceeds_authorization")
+        if code == "validation_failed":
+            return err(422, "validation_failed")
+        return 201, resp
+
+    with store._lock:
+        code, rec, is_new = store.resolve_idempotency(uid, "POST", f"/authorizations/{auth_id}/capture", key, body, True)
+        if code == "missing_idempotency_key":
+            return err(400, "missing_idempotency_key")
+        if code == "validation_failed":
+            return err(422, "validation_failed")
+        if code == "idempotency_key_reuse":
+            return err(409, "idempotency_key_reuse")
+        if code == "replay" and rec:
+            return ok_json(200, rec.response)
+        result = run()
+        if isinstance(result, JSONResponse):
+            return result
+        status, resp_body = result
+        if status == 201 and key:
+            store.save_idempotency(uid, key, "POST", f"/authorizations/{auth_id}/capture", body, resp_body, 201)
+        return ok_json(status, resp_body)
+
+
+@app.post("/authorizations/{auth_id}/void")
+def void_authorization(auth_id: str, request: Request) -> JSONResponse:
+    uid = auth_user_id(request)
+    if uid is None:
+        return err(401, "unauthenticated")
+
+    with store._lock:
+        code, resp = store.void_authorization(auth_id, uid)
+        if code == "not_found":
+            return err(404, "not_found")
+        if code == "forbidden":
+            return err(403, "forbidden")
+        if code == "authorization_not_open":
+            return err(409, "authorization_not_open")
+        return ok_json(200, resp)
+
+
+@app.get("/authorizations")
+def get_authorizations(request: Request) -> JSONResponse:
+    uid = auth_user_id(request)
+    if uid is None:
+        return err(401, "unauthenticated")
+
+    direction = request.query_params.get("direction")
+    status = request.query_params.get("status")
+    limit = parse_query_int(request.query_params.get("limit"))
+    offset = parse_query_int(request.query_params.get("offset"))
+
+    if limit is None or offset is None:
+        return err(422, "validation_failed")
+    if limit < 1 or limit > 200:
+        return err(422, "validation_failed")
+    if offset < 0:
+        return err(422, "validation_failed")
+    if direction is not None and direction not in ("incoming", "outgoing"):
+        return err(422, "validation_failed")
+    if status is not None and status not in ("open", "captured", "voided", "expired"):
+        return err(422, "validation_failed")
+    if limit == 0:
+        limit = 50
+    if offset is None:
+        offset = 0
+
+    with store._lock:
+        result = store.list_authorizations(uid, direction, status, limit, offset)
+    return ok_json(200, result)
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])

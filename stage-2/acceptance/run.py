@@ -1,4 +1,4 @@
-"""Build the stage-2 image the way RUN.md does, start it, run this suite."""
+"""Build the stage-1 image the way RUN.md does, start it, run this suite."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STAGE = HERE.parent
-IMAGE = "pocketful-s2"
+IMAGE = "pocketful-s1"
 
 
 def pip_install() -> None:
@@ -50,7 +50,7 @@ def wait_health(url: str, timeout: float = 60.0) -> None:
 def start_container() -> tuple[str, str]:
     subprocess.check_call(["docker", "build", "-t", IMAGE, "."], cwd=str(STAGE))
     host_port = free_port()
-    name = f"pocketful-s2-accept-{uuid.uuid4().hex[:10]}"
+    name = f"pocketful-s1-accept-{uuid.uuid4().hex[:10]}"
     subprocess.check_call(
         [
             "docker",
@@ -92,7 +92,7 @@ def run_pytest(base_url: str) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run Pocketful stage-2 acceptance")
+    parser = argparse.ArgumentParser(description="Run Pocketful stage-1 acceptance")
     parser.add_argument("--base-url", default=None)
     parser.add_argument("--skip-install", action="store_true")
     args = parser.parse_args()

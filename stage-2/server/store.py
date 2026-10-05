@@ -45,6 +45,7 @@ class Payment:
     settlement_id: str | None
     created_at: str
     seq: int = 0
+    authorization_id: str | None = None
 
 
 @dataclass
@@ -80,6 +81,22 @@ class Settlement:
 
 
 @dataclass
+class Authorization:
+    id: str
+    from_user_id: str
+    to_user_id: str
+    amount: int
+    note: str
+    visibility: str
+    status: str
+    expires_at: str
+    created_at: str
+    captured_amount: int = 0
+    payment_id: str | None = None
+    seq: int = 0
+
+
+@dataclass
 class IdempotencyRecord:
     method: str
     path: str
@@ -94,6 +111,7 @@ class Store:
         self.ready = False
         self.currency = "EUR"
         self.minor_units = 2
+        self.authorization_ttl_seconds = 600
         self.users: dict[str, User] = {}
         self.users_by_email: dict[str, str] = {}
         self.users_by_handle: dict[str, str] = {}
@@ -102,10 +120,12 @@ class Store:
         self.requests: dict[str, MoneyRequest] = {}
         self.splits: dict[str, Split] = {}
         self.settlements: dict[str, Settlement] = {}
+        self.authorizations: dict[str, Authorization] = {}
         self.settlement_operator_ids: set[str] = set()
         self.idempotency: dict[tuple[str, str, str, str], IdempotencyRecord] = {}
         self._pay_seq = 0
         self._req_seq = 0
+        self._auth_seq = 0
 
     def _next_pay_seq(self) -> int:
         self._pay_seq += 1
@@ -114,6 +134,10 @@ class Store:
     def _next_req_seq(self) -> int:
         self._req_seq += 1
         return self._req_seq
+
+    def _next_auth_seq(self) -> int:
+        self._auth_seq += 1
+        return self._auth_seq
 
     def mark_ready(self) -> None:
         with self._lock:
@@ -126,11 +150,20 @@ class Store:
         return bcrypt.checkpw(password.encode("utf-8"), user.password_hash)
 
     def user_public(self, user: User) -> dict[str, Any]:
+        held = sum(
+            a.amount - a.captured_amount
+            for a in self.authorizations.values()
+            if a.from_user_id == user.id and a.status == "open"
+        )
+        available = user.balance - held
         return {
             "user_id": user.id,
             "display_name": user.display_name,
             "handle": user.handle,
             "balance": user.balance,
+            "total": user.balance,
+            "available": available,
+            "held": held,
             "currency": self.currency,
             "minor_units": self.minor_units,
         }
@@ -151,6 +184,7 @@ class Store:
             "request_id": p.request_id,
             "settlement_id": p.settlement_id,
             "created_at": p.created_at,
+            "authorization_id": p.authorization_id,
         }
 
     def request_public(self, r: MoneyRequest) -> dict[str, Any]:
@@ -279,6 +313,44 @@ class Store:
         for oid in ops:
             if not isinstance(oid, str) or oid not in user_ids:
                 return "validation_failed"
+
+        ttl = data.get("authorization_ttl_seconds", 600)
+        if not isinstance(ttl, int) or ttl <= 0:
+            return "validation_failed"
+
+        auths = data.get("authorizations", [])
+        if auths is None:
+            auths = []
+        if not isinstance(auths, list):
+            return "validation_failed"
+        total_held = {}
+        for a in auths:
+            if not isinstance(a, dict):
+                return "validation_failed"
+            aid = a.get("id")
+            fid = a.get("from_user_id")
+            tid = a.get("to_user_id")
+            amount = parse_amount(a.get("amount"))
+            status = a.get("status")
+            expires = a.get("expires_at")
+            if not isinstance(aid, str) or len(aid) > 64:
+                return "validation_failed"
+            if fid not in user_ids or tid not in user_ids:
+                return "validation_failed"
+            if amount is None or amount < 1 or amount > 1_000_000_000:
+                return "validation_failed"
+            if status not in ("open", "captured", "voided", "expired"):
+                return "validation_failed"
+            if not isinstance(expires, str):
+                return "validation_failed"
+            if status == "open":
+                total_held[fid] = total_held.get(fid, 0) + amount
+
+        user_balances = {u["id"]: u["balance"] for u in parsed_users}
+        for uid in user_ids:
+            if total_held.get(uid, 0) > user_balances[uid]:
+                return "validation_failed"
+
         return None
 
     def apply_reset(self, data: dict[str, Any]) -> str | None:
@@ -288,6 +360,7 @@ class Store:
         ts = now_rfc3339()
         self.currency = data["currency"]
         self.minor_units = data["minor_units"]
+        self.authorization_ttl_seconds = data.get("authorization_ttl_seconds", 600)
         self.users.clear()
         self.users_by_email.clear()
         self.users_by_handle.clear()
@@ -296,9 +369,11 @@ class Store:
         self.requests.clear()
         self.splits.clear()
         self.settlements.clear()
+        self.authorizations.clear()
         self.idempotency.clear()
         self._pay_seq = 0
         self._req_seq = 0
+        self._auth_seq = 0
         self.settlement_operator_ids = set(data.get("settlement_operator_ids") or [])
         for u in data["users"]:
             pw_hash = self.hash_password(u["password"])
@@ -352,12 +427,32 @@ class Store:
                 seq=self._next_req_seq(),
             )
             self.requests[mr.id] = mr
+        for a in data.get("authorizations") or []:
+            note = a.get("note", "")
+            if note is None:
+                note = ""
+            auth = Authorization(
+                id=a["id"],
+                from_user_id=a["from_user_id"],
+                to_user_id=a["to_user_id"],
+                amount=parse_amount(a["amount"]) or 0,
+                note=note,
+                visibility=a.get("visibility", "public"),
+                status=a["status"],
+                expires_at=a["expires_at"],
+                created_at=a.get("created_at", ts),
+                captured_amount=parse_amount(a.get("captured_amount", 0)) or 0,
+                payment_id=a.get("payment_id"),
+                seq=self._next_auth_seq(),
+            )
+            self.authorizations[auth.id] = auth
         return None
 
     def export_state(self) -> dict[str, Any]:
         return {
             "currency": self.currency,
             "minor_units": self.minor_units,
+            "authorization_ttl_seconds": self.authorization_ttl_seconds,
             "settlement_operator_ids": sorted(self.settlement_operator_ids),
             "users": [
                 {
@@ -373,6 +468,7 @@ class Store:
             "tokens": dict(self.tokens),
             "payments": [copy.deepcopy(p.__dict__) for p in self.payments.values()],
             "requests": [copy.deepcopy(r.__dict__) for r in self.requests.values()],
+            "authorizations": [copy.deepcopy(a.__dict__) for a in self.authorizations.values()],
             "splits": [copy.deepcopy(s.__dict__) for s in self.splits.values()],
             "settlements": [copy.deepcopy(st.__dict__) for st in self.settlements.values()],
             "idempotency": {
@@ -564,7 +660,13 @@ class Store:
         if to_id is None:
             return "not_found", None
         payer = self.users[from_id]
-        if payer.balance < amount:
+        held = sum(
+            a.amount - a.captured_amount
+            for a in self.authorizations.values()
+            if a.from_user_id == from_id and a.status == "open"
+        )
+        available = payer.balance - held
+        if available < amount:
             return "insufficient_funds", None
         payer.balance -= amount
         self.users[to_id].balance += amount
@@ -613,7 +715,14 @@ class Store:
             return "forbidden", None
         if mr.status != "pending":
             return "request_not_pending", None
-        if self.users[payer_id].balance < mr.amount:
+        payer = self.users[payer_id]
+        held = sum(
+            a.amount - a.captured_amount
+            for a in self.authorizations.values()
+            if a.from_user_id == payer_id and a.status == "open"
+        )
+        available = payer.balance - held
+        if available < mr.amount:
             return "insufficient_funds", None
         self.users[payer_id].balance -= mr.amount
         self.users[mr.requester_id].balance += mr.amount
@@ -819,6 +928,138 @@ class Store:
         page = visible[offset : offset + limit]
         has_more = len(visible) > offset + limit
         return {"payments": [self.payment_public(p) for p in page], "has_more": has_more}
+
+    def authorization_public(self, a: Authorization) -> dict[str, Any]:
+        from_user = self.users[a.from_user_id]
+        to_user = self.users[a.to_user_id]
+        return {
+            "authorization_id": a.id,
+            "from_user_id": a.from_user_id,
+            "from_handle": from_user.handle,
+            "to_user_id": a.to_user_id,
+            "to_handle": to_user.handle,
+            "amount": a.amount,
+            "captured_amount": a.captured_amount,
+            "currency": self.currency,
+            "note": a.note,
+            "visibility": a.visibility,
+            "status": a.status,
+            "expires_at": a.expires_at,
+            "created_at": a.created_at,
+            "payment_id": a.payment_id,
+        }
+
+    def create_authorization(
+        self, from_id: str, to_handle: str, amount: int, note: str, visibility: str
+    ) -> tuple[str, dict[str, Any] | None]:
+        if from_id == self.users_by_handle.get(to_handle):
+            return "self_payment", None
+        to_id = self.users_by_handle.get(to_handle)
+        if to_id is None:
+            return "not_found", None
+        payer = self.users[from_id]
+        held = sum(
+            a.amount - a.captured_amount
+            for a in self.authorizations.values()
+            if a.from_user_id == from_id and a.status == "open"
+        )
+        available = payer.balance - held
+        if available < amount:
+            return "insufficient_funds", None
+        created_at = now_rfc3339()
+        from datetime import datetime, timedelta
+        created_dt = datetime.fromisoformat(created_at.replace("+00:00", "+00:00"))
+        expires_dt = created_dt + timedelta(seconds=self.authorization_ttl_seconds)
+        expires_at = expires_dt.isoformat()
+        aid = gen_id("a")
+        auth = Authorization(
+            id=aid,
+            from_user_id=from_id,
+            to_user_id=to_id,
+            amount=amount,
+            note=note,
+            visibility=visibility,
+            status="open",
+            expires_at=expires_at,
+            created_at=created_at,
+            captured_amount=0,
+            payment_id=None,
+            seq=self._next_auth_seq(),
+        )
+        self.authorizations[aid] = auth
+        return "ok", self.authorization_public(auth)
+
+    def capture_authorization(
+        self, auth_id: str, receiver_id: str, capture_amount: int | None
+    ) -> tuple[str, dict[str, Any] | None]:
+        auth = self.authorizations.get(auth_id)
+        if auth is None:
+            return "not_found", None
+        if auth.to_user_id != receiver_id:
+            return "forbidden", None
+        if auth.status != "open":
+            if auth.status == "expired":
+                return "authorization_expired", None
+            return "authorization_not_open", None
+        if capture_amount is None:
+            capture_amount = auth.amount - auth.captured_amount
+        if capture_amount < 1:
+            return "validation_failed", None
+        if capture_amount > auth.amount - auth.captured_amount:
+            return "capture_exceeds_authorization", None
+        auth.captured_amount += capture_amount
+        payer = self.users[auth.from_user_id]
+        payer.balance -= capture_amount
+        self.users[auth.to_user_id].balance += capture_amount
+        pid = gen_id("p")
+        pay = Payment(
+            id=pid,
+            from_user_id=auth.from_user_id,
+            to_user_id=auth.to_user_id,
+            amount=capture_amount,
+            note=auth.note,
+            visibility=auth.visibility,
+            request_id=None,
+            settlement_id=None,
+            created_at=now_rfc3339(),
+            seq=self._next_pay_seq(),
+            authorization_id=auth_id,
+        )
+        self.payments[pid] = pay
+        auth.payment_id = pid
+        if auth.captured_amount == auth.amount:
+            auth.status = "captured"
+        return "ok", self.payment_public(pay)
+
+    def void_authorization(self, auth_id: str, payer_id: str) -> tuple[str, dict[str, Any] | None]:
+        auth = self.authorizations.get(auth_id)
+        if auth is None:
+            return "not_found", None
+        if auth.from_user_id != payer_id:
+            return "forbidden", None
+        if auth.status not in ("open", "voided"):
+            return "authorization_not_open", None
+        auth.status = "voided"
+        return "ok", self.authorization_public(auth)
+
+    def list_authorizations(
+        self, user_id: str, direction: str | None, status: str | None, limit: int, offset: int
+    ) -> dict[str, Any]:
+        items = []
+        for a in self.authorizations.values():
+            if a.from_user_id != user_id and a.to_user_id != user_id:
+                continue
+            if direction == "incoming" and a.to_user_id != user_id:
+                continue
+            if direction == "outgoing" and a.from_user_id != user_id:
+                continue
+            if status is not None and a.status != status:
+                continue
+            items.append(a)
+        items.sort(key=lambda x: (x.created_at, x.seq), reverse=True)
+        page = items[offset : offset + limit]
+        has_more = len(items) > offset + limit
+        return {"authorizations": [self.authorization_public(a) for a in page], "has_more": has_more}
 
 
 store = Store()
