@@ -44,6 +44,7 @@ class Payment:
     request_id: str | None
     settlement_id: str | None
     created_at: str
+    seq: int = 0
 
 
 @dataclass
@@ -56,6 +57,7 @@ class MoneyRequest:
     status: str
     payment_id: str | None
     created_at: str
+    seq: int = 0
 
 
 @dataclass
@@ -102,6 +104,16 @@ class Store:
         self.settlements: dict[str, Settlement] = {}
         self.settlement_operator_ids: set[str] = set()
         self.idempotency: dict[tuple[str, str, str, str], IdempotencyRecord] = {}
+        self._pay_seq = 0
+        self._req_seq = 0
+
+    def _next_pay_seq(self) -> int:
+        self._pay_seq += 1
+        return self._pay_seq
+
+    def _next_req_seq(self) -> int:
+        self._req_seq += 1
+        return self._req_seq
 
     def mark_ready(self) -> None:
         with self._lock:
@@ -190,6 +202,8 @@ class Store:
                 return "validation_failed"
             if len(uid) > 64:
                 return "validation_failed"
+            if isinstance(balance, (str, bool)):
+                return "malformed"
             bal = parse_amount(balance)
             if bal is None or bal < 0:
                 return "validation_failed"
@@ -285,6 +299,8 @@ class Store:
         self.splits.clear()
         self.settlements.clear()
         self.idempotency.clear()
+        self._pay_seq = 0
+        self._req_seq = 0
         self.settlement_operator_ids = set(data.get("settlement_operator_ids") or [])
         for u in data["users"]:
             pw_hash = self.hash_password(u["password"])
@@ -316,6 +332,7 @@ class Store:
                 request_id=None,
                 settlement_id=None,
                 created_at=created,
+                seq=self._next_pay_seq(),
             )
             self.payments[pay.id] = pay
         for r in data.get("requests") or []:
@@ -334,6 +351,7 @@ class Store:
                 status=r["status"],
                 payment_id=r.get("payment_id"),
                 created_at=created,
+                seq=self._next_req_seq(),
             )
             self.requests[mr.id] = mr
         return None
@@ -415,17 +433,21 @@ class Store:
             return "validation_failed"
         self.tokens = {str(k): str(v) for k, v in tokens.items()}
         self.payments.clear()
+        self._pay_seq = 0
         for p in state.get("payments") or []:
             if not isinstance(p, dict):
                 return "validation_failed"
             pay = Payment(**p)
             self.payments[pay.id] = pay
+            self._pay_seq = max(self._pay_seq, pay.seq)
         self.requests.clear()
+        self._req_seq = 0
         for r in state.get("requests") or []:
             if not isinstance(r, dict):
                 return "validation_failed"
             mr = MoneyRequest(**r)
             self.requests[mr.id] = mr
+            self._req_seq = max(self._req_seq, mr.seq)
         self.splits.clear()
         for s in state.get("splits") or []:
             if not isinstance(s, dict):
@@ -559,6 +581,7 @@ class Store:
             request_id=None,
             settlement_id=None,
             created_at=now_rfc3339(),
+            seq=self._next_pay_seq(),
         )
         self.payments[pid] = pay
         return "ok", self.payment_public(pay)
@@ -579,6 +602,7 @@ class Store:
             status="pending",
             payment_id=None,
             created_at=now_rfc3339(),
+            seq=self._next_req_seq(),
         )
         self.requests[rid] = mr
         return "ok", self.request_public(mr)
@@ -606,6 +630,7 @@ class Store:
             request_id=mr.id,
             settlement_id=None,
             created_at=now_rfc3339(),
+            seq=self._next_pay_seq(),
         )
         self.payments[pid] = pay
         mr.status = "paid"
@@ -760,6 +785,7 @@ class Store:
                 request_id=None,
                 settlement_id=sid,
                 created_at=committed,
+                seq=self._next_pay_seq(),
             )
             self.payments[pid] = pay
             payment_ids.append(pid)
@@ -781,7 +807,7 @@ class Store:
             if status is not None and r.status != status:
                 continue
             items.append(r)
-        items.sort(key=lambda x: x.created_at, reverse=True)
+        items.sort(key=lambda x: (x.created_at, x.seq), reverse=True)
         page = items[offset : offset + limit]
         has_more = len(items) > offset + limit
         return {"requests": [self.request_public(r) for r in page], "has_more": has_more}
@@ -791,7 +817,7 @@ class Store:
         for p in self.payments.values():
             if p.visibility == "public" or p.from_user_id == user_id or p.to_user_id == user_id:
                 visible.append(p)
-        visible.sort(key=lambda x: x.created_at, reverse=True)
+        visible.sort(key=lambda x: (x.created_at, x.seq), reverse=True)
         page = visible[offset : offset + limit]
         has_more = len(visible) > offset + limit
         return {"payments": [self.payment_public(p) for p in page], "has_more": has_more}
