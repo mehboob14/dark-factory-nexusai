@@ -60,3 +60,4 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 13:16 UTC+5 — reviewer confirmed ready. Dispatching implementer (W1–W11) and tester (W12) in parallel with the full contract and spec.
 - 13:23 UTC+5 — implementer started then hit a premature-close. Scaffolding (Dockerfile, RUN.md, requirements.txt) exists; server/ is empty. Told implementer to resume and commit incrementally.
 - 13:29 UTC+5 — tester crashed mid-suite. Uncommitted acceptance files cover delivery through settlements. Told tester to commit and finish export/import, concurrency, and non-goals.
+- 13:33 UTC+5 — tester crashed again after adding export/concurrency/nongoals. Told tester to commit the suite. Pinged implementer: server files still uncommitted.
