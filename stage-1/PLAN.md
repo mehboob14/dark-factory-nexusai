@@ -67,3 +67,4 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 13:58 UTC+5 — implementer committed service `a1772612ff1623bdf301ca5fb763f31c48703982` (Dockerfile, RUN.md, server/). Dispatching W13: acceptance suite plus harness sample and isolated mode.
 - 14:00 UTC+5 — implementer reported isolated 147/147, `claimed stage: 1`, stage-2 overshoot fail. Sent W14 review handoff for `a1772612ff1623bdf301ca5fb763f31c48703982`.
 - 14:01 UTC+5 — reviewer asked to wait for W13. Told them to start now and verify isolated harness plus suite independently.
+- 14:04 UTC+5 — REJECT a177261 for R57/R59/R62: idempotency map keyed only by (user_id, key), so a same-key use on another path overwrites the first record and later replay can take effect twice. Forwarded to implementer. Isolated 147/147 is not an accept.
