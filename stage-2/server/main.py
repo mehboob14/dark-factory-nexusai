@@ -551,49 +551,101 @@ async def post_settlements(request: Request) -> JSONResponse:
 async def home(request: Request) -> Response:
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
+        # Always render page; JavaScript determines auth state from localStorage
         html = """<!DOCTYPE html>
 <html>
 <head><title>Pocketful</title><style>
 body { font-family: sans-serif; margin: 20px; }
+.user-bar { background: #f0f0f0; padding: 10px; margin-bottom: 20px; display: none; }
+.user-bar.show { display: block; }
+.auth-needed { display: block; }
+.auth-needed.hidden { display: none; }
 .balance-display { font-size: 24px; margin: 20px 0; }
 form { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
 input, select, button { display: block; margin: 5px 0; padding: 5px; width: 200px; }
 button { width: auto; cursor: pointer; }
-.error { color: red; display: none; }
-.activity-item { border: 1px solid #ddd; margin: 5px 0; padding: 5px; }
+.error { color: red; }
 </style></head>
 <body>
-<div data-testid="current-user" style="display:none;"></div>
-<button data-testid="logout-button" style="display:none;">Logout</button>
-<h1>Wallet</h1>
-<div class="balance-display">
-  <div>Balance: <span data-testid="wallet-balance" data-amount="0">0.00 EUR</span></div>
-  <div>Available: <span data-testid="wallet-available" data-amount="0">0.00 EUR</span></div>
+<div class="user-bar" id="user-bar">
+  <span data-testid="current-user"></span>
+  (<span data-testid="current-handle"></span>)
+  <button data-testid="logout-button">Logout</button>
 </div>
-<h2>Send Payment</h2>
-<form id="pay-form">
-  <label>To: <input data-testid="pay-handle" type="text" placeholder="handle" /></label>
-  <label>Amount: <input data-testid="pay-amount" type="text" placeholder="0.00" /></label>
-  <label>Note: <input data-testid="pay-note" type="text" placeholder="" /></label>
-  <label>Visibility: <select data-testid="pay-visibility"><option value="public">public</option><option value="private">private</option></select></label>
-  <button data-testid="pay-submit" type="submit">Pay</button>
-  <div data-testid="pay-error" class="error"></div>
-</form>
-<h2>Request Payment</h2>
-<form id="request-form">
-  <label>From: <input data-testid="request-handle" type="text" placeholder="handle" /></label>
-  <label>Amount: <input data-testid="request-amount" type="text" placeholder="0.00" /></label>
-  <label>Note: <input data-testid="request-note" type="text" placeholder="" /></label>
-  <button data-testid="request-submit" type="submit">Request</button>
-  <div data-testid="request-error" class="error"></div>
-</form>
-<h2>Activity Feed</h2>
-<div data-testid="activity-list"></div>
-<div data-testid="empty-activity">No activity</div>
+
+<div id="not-authed" class="auth-needed">
+  <p><a href="/login">Log in</a> or <a href="/signup">sign up</a></p>
+</div>
+
+<div id="authed" class="auth-needed hidden">
+  <h1>Wallet</h1>
+  <div class="balance-display">
+    <div>Balance: <span data-testid="wallet-balance" data-amount="0">0.00 EUR</span></div>
+    <div>Available: <span data-testid="wallet-available" data-amount="0">0.00 EUR</span></div>
+  </div>
+  <h2>Send Payment</h2>
+  <form id="pay-form">
+    <label>To: <input data-testid="pay-handle" type="text" placeholder="handle" /></label>
+    <label>Amount: <input data-testid="pay-amount" type="text" placeholder="0.00" /></label>
+    <label>Note: <input data-testid="pay-note" type="text" placeholder="" /></label>
+    <label>Visibility: <select data-testid="pay-visibility"><option value="public">public</option><option value="private">private</option></select></label>
+    <button data-testid="pay-submit" type="submit">Pay</button>
+    <div data-testid="pay-error" class="error"></div>
+  </form>
+  <h2>Request Payment</h2>
+  <form id="request-form">
+    <label>From: <input data-testid="request-handle" type="text" placeholder="handle" /></label>
+    <label>Amount: <input data-testid="request-amount" type="text" placeholder="0.00" /></label>
+    <label>Note: <input data-testid="request-note" type="text" placeholder="" /></label>
+    <button data-testid="request-submit" type="submit">Request</button>
+    <div data-testid="request-error" class="error"></div>
+  </form>
+  <h2>Activity Feed</h2>
+  <div data-testid="activity-list"></div>
+  <div data-testid="empty-activity">No activity</div>
+</div>
+
+<script>
+const token = localStorage.getItem('token');
+const displayName = localStorage.getItem('displayName');
+const handle = localStorage.getItem('handle');
+
+if (token && displayName && handle) {
+  // Show authenticated view
+  document.getElementById('authed').classList.remove('hidden');
+  document.getElementById('not-authed').classList.add('hidden');
+  document.getElementById('user-bar').classList.add('show');
+
+  document.querySelector('[data-testid="current-user"]').textContent = displayName;
+  document.querySelector('[data-testid="current-handle"]').textContent = handle;
+
+  // Fetch and display balance
+  fetch('/me', { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(r => r.json())
+    .then(data => {
+      const bal = (data.balance / Math.pow(10, data.minor_units)).toFixed(data.minor_units);
+      const avail = (data.available / Math.pow(10, data.minor_units)).toFixed(data.minor_units);
+      document.querySelector('[data-testid="wallet-balance"]').textContent = bal + ' ' + data.currency;
+      document.querySelector('[data-testid="wallet-available"]').textContent = avail + ' ' + data.currency;
+      document.querySelector('[data-testid="wallet-balance"]').dataset.amount = data.balance;
+      document.querySelector('[data-testid="wallet-available"]').dataset.amount = data.available;
+    });
+
+  document.querySelector('[data-testid="logout-button"]').onclick = () => {
+    localStorage.clear();
+    location.reload();
+  };
+} else {
+  // Show unauthenticated view
+  document.getElementById('authed').classList.add('hidden');
+  document.getElementById('not-authed').classList.remove('hidden');
+}
+</script>
 </body>
 </html>
 """
         return html_response(html)
+
     uid = auth_user_id(request)
     if uid is None:
         return err(401, "unauthenticated")
@@ -715,7 +767,7 @@ body { font-family: sans-serif; margin: 20px; }
 form { padding: 20px; border: 1px solid #ccc; max-width: 300px; }
 input, button { display: block; margin: 10px 0; padding: 8px; width: 100%; box-sizing: border-box; }
 button { width: auto; cursor: pointer; }
-.error { color: red; display: none; }
+.error { color: red; }
 a { display: block; margin-top: 20px; }
 </style></head>
 <body>
@@ -725,9 +777,35 @@ a { display: block; margin-top: 20px; }
   <label>Password: <input data-testid="signup-password" type="password" placeholder="(min 8 characters)" /></label>
   <label>Display Name: <input data-testid="signup-display-name" type="text" placeholder="Your Name" /></label>
   <button data-testid="signup-submit" type="submit">Sign Up</button>
-  <div data-testid="auth-error" class="error"></div>
+  <div data-testid="auth-error"></div>
 </form>
 <p><a href="/login">Already have an account? Log in</a></p>
+<script>
+document.getElementById('signup-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const email = document.querySelector('[data-testid="signup-email"]').value;
+  const password = document.querySelector('[data-testid="signup-password"]').value;
+  const displayName = document.querySelector('[data-testid="signup-display-name"]').value;
+  const errDiv = document.querySelector('[data-testid="auth-error"]');
+
+  const resp = await fetch('/auth/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, display_name: displayName })
+  });
+
+  const data = await resp.json();
+  if (resp.ok) {
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('userId', data.user_id);
+    localStorage.setItem('displayName', data.display_name);
+    localStorage.setItem('handle', data.handle || email.split('@')[0].substring(0, 20).replace(/[^a-z0-9_]/g, '_'));
+    location.href = '/';
+  } else {
+    errDiv.textContent = data.error?.message || 'Sign up failed';
+  }
+};
+</script>
 </body>
 </html>
 """
@@ -746,9 +824,8 @@ body { font-family: sans-serif; margin: 20px; }
 form { padding: 20px; border: 1px solid #ccc; max-width: 300px; }
 input, button { display: block; margin: 10px 0; padding: 8px; width: 100%; box-sizing: border-box; }
 button { width: auto; cursor: pointer; }
-.error { color: red; display: none; }
-.nav { display: none; }
-.nav.shown { display: block; margin-top: 20px; }
+.error { color: red; }
+.nav { margin-top: 20px; }
 a { display: block; margin: 5px 0; }
 </style></head>
 <body>
@@ -757,13 +834,41 @@ a { display: block; margin: 5px 0; }
   <label>Email: <input data-testid="login-email" type="email" placeholder="user@example.com" /></label>
   <label>Password: <input data-testid="login-password" type="password" placeholder="" /></label>
   <button data-testid="login-submit" type="submit">Log In</button>
-  <div data-testid="auth-error" class="error"></div>
+  <div data-testid="auth-error"></div>
 </form>
 <div class="nav">
   <p>Don't have an account? <a href="/signup">Sign up</a></p>
 </div>
 <div data-testid="current-user" style="display:none;"></div>
 <div data-testid="current-handle" style="display:none;"></div>
+<script>
+document.getElementById('login-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const email = document.querySelector('[data-testid="login-email"]').value;
+  const password = document.querySelector('[data-testid="login-password"]').value;
+  const errDiv = document.querySelector('[data-testid="auth-error"]');
+
+  const resp = await fetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+
+  const data = await resp.json();
+  if (resp.ok) {
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('userId', data.user_id);
+    localStorage.setItem('displayName', data.display_name);
+    // Get handle from API
+    const meResp = await fetch('/me', { headers: { 'Authorization': 'Bearer ' + data.token } });
+    const meData = await meResp.json();
+    localStorage.setItem('handle', meData.handle);
+    location.href = '/';
+  } else {
+    errDiv.textContent = data.error?.message || 'Login failed';
+  }
+};
+</script>
 </body>
 </html>
 """
