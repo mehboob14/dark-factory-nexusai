@@ -70,3 +70,4 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 14:04 UTC+5 — REJECT a177261 for R57/R59/R62: idempotency map keyed only by (user_id, key), so a same-key use on another path overwrites the first record and later replay can take effect twice. Forwarded to implementer. Isolated 147/147 is not an accept.
 - 14:26 UTC+5 — implementer resume still points at rejected a177261; store.py still keys (user_id, key). Checkpoint `60297a7` has no store.py change. Told implementer reject stands; new commit required.
 - 14:33 UTC+5 — tester W13 on a177261: suite 4 FAIL (R122, R44, R100, R41), all suite assertion bugs; host harness stuck building. Told tester to stop that harness, fix acceptance/ only, wait for a new product hash.
+- 14:35 UTC+5 — tester asked for a W13 hash. None exists yet. Told them not to rerun a177261/60297a7.
