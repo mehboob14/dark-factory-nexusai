@@ -62,3 +62,4 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 13:29 UTC+5 — tester crashed mid-suite. Uncommitted acceptance files cover delivery through settlements. Told tester to commit and finish export/import, concurrency, and non-goals.
 - 13:33 UTC+5 — tester crashed again after adding export/concurrency/nongoals. Told tester to commit the suite. Pinged implementer: server files still uncommitted.
 - 13:35 UTC+5 — tester committed suite `e55a3f7aaf2f810b98762298e0653e590faed3dc` then cleanup `ad9b010cf4b47cc6b0c6872fc33e75992dff8e00`. Implementer product files still uncommitted.
+- 13:37 UTC+5 — tester reported W12: suite `C:\Development\darkfactory\band-work\result\stage-1\acceptance` at `ad9b010cf4b47cc6b0c6872fc33e75992dff8e00`. Run: `python C:\Development\darkfactory\band-work\result\stage-1\acceptance\run.py`. Covers R1–R7 and R9–R159 (166 checks). R8 not observable over HTTP. W13 blocked on an implementer product commit.
