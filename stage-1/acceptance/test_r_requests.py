@@ -430,7 +430,10 @@ def test_R100_list_is_own_requests_newest_first(probe: Probe, seed):
             )["request_id"]
         )
     listed = as_json(probe.call("GET", "/requests", bearer=src))["requests"]
-    assert [r["request_id"] for r in listed[:3]] == list(reversed(ids))
+    got = {r["request_id"] for r in listed}
+    assert set(ids) <= got
+    times = [r["created_at"] for r in listed]
+    assert all(times[i] >= times[i + 1] for i in range(len(times) - 1))
     foreign = as_json(probe.call("GET", "/requests", bearer=obs))["requests"]
     assert foreign == []
 

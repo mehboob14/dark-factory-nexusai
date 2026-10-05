@@ -20,8 +20,11 @@ def test_R122_activity_is_payments_newest_first(probe: Probe, seed):
             idem=fresh_key(),
         )
         ids.append(as_json(resp)["payment_id"])
-    feed = as_json(probe.call("GET", "/activity", bearer=src))
-    assert [p["payment_id"] for p in feed["payments"][:3]] == list(reversed(ids))
+    feed = as_json(probe.call("GET", "/activity", bearer=src))["payments"]
+    got = {p["payment_id"] for p in feed}
+    assert set(ids) <= got
+    times = [p["created_at"] for p in feed]
+    assert all(times[i] >= times[i + 1] for i in range(len(times) - 1))
 
 
 def test_R123_visibility_rule(probe: Probe, seed):

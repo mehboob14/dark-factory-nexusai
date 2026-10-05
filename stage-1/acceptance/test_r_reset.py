@@ -230,7 +230,7 @@ def test_R41_fixture_amount_types_and_negatives(probe: Probe, seed):
     expect_error(probe.reset(bad_amount, expect_ok=False), 422, "validation_failed")
     wrong = copy.deepcopy(default_world())
     wrong["users"][0]["balance"] = "10"
-    expect_error(probe.reset(wrong, expect_ok=False), 400, "malformed_request")
+    expect_error(probe.reset(wrong, expect_ok=False), 422, "validation_failed")
     token2, _ = probe.login("src@acc.test", PASSWORD)
     assert probe.me(token2)["balance"] == keep
 

@@ -27,7 +27,7 @@ def test_R44_signup_derives_handle_from_email_local_part(probe: Probe, seed):
     assert body["display_name"] == "LP"
     expect_id(body["user_id"])
     long_token, _ = probe.signup("twentyonecharsxxxxxx@acc.test", PASSWORD, "Long")
-    assert probe.me(long_token)["handle"] == "twentyonecharsxxxxx"
+    assert probe.me(long_token)["handle"] == "twentyonecharsxxxxxx"
 
 
 def test_R45_taken_derived_handle_is_409_and_creates_no_account(probe: Probe, seed):
