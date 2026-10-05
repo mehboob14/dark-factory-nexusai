@@ -66,3 +66,4 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 13:40 UTC+5 — tester updated suite to `22376e72abbf893fcc9ec8007d69dbe46a53b5fc` (R16 scientific notation on the wire, R153 per-call 10s budget, R1/R2/R9 skip if delivery files absent). Implementer still uncommitted.
 - 13:58 UTC+5 — implementer committed service `a1772612ff1623bdf301ca5fb763f31c48703982` (Dockerfile, RUN.md, server/). Dispatching W13: acceptance suite plus harness sample and isolated mode.
 - 14:00 UTC+5 — implementer reported isolated 147/147, `claimed stage: 1`, stage-2 overshoot fail. Sent W14 review handoff for `a1772612ff1623bdf301ca5fb763f31c48703982`.
+- 14:01 UTC+5 — reviewer asked to wait for W13. Told them to start now and verify isolated harness plus suite independently.
