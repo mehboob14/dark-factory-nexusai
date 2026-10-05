@@ -1,1 +1,1 @@
-# Pocketful stage-1 HTTP service
+"""Pocketful stage-1 wallet/payments HTTP service."""
