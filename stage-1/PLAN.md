@@ -73,3 +73,4 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 14:35 UTC+5 — tester asked for a W13 hash. None exists yet. Told them not to rerun a177261/60297a7.
 - 14:43 UTC+5 — reviewer restated REJECT a177261 (isolated 147/147, same defect 1). Already recorded.
 - 14:47 UTC+5 — implementer `7edc9f6` is RUN.md only; store still keys (user_id, key). Told reviewer to stop reruns. Told implementer 7edc9f6 is not a fix.
+- 15:11 UTC+5 — implementer resubmitted `7edc9f6` isolated 147/147. Same defect still on disk. Told them not to resubmit; new store.py commit required.
