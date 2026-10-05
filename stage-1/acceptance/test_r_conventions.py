@@ -94,15 +94,20 @@ def test_R15_single_currency_and_integer_minor_units(probe: Probe, seed):
 
 def test_R16_integral_json_number_forms_are_valid_amounts(probe: Probe, seed):
     token = _src(probe)
-    for amount in (1000, 1000.0, 1e3):
+    cases = [
+        (b'{"to_handle":"dstuser","amount":1000}', 1000),
+        (b'{"to_handle":"dstuser","amount":1000.0}', 1000.0),
+        (b'{"to_handle":"dstuser","amount":1e3}', "1e3"),
+    ]
+    for raw, label in cases:
         resp = probe.call(
             "POST",
             "/payments",
-            body={"to_handle": "dstuser", "amount": amount},
+            raw=raw,
             bearer=token,
             idem=fresh_key(),
         )
-        assert resp.status_code == 201, (amount, resp.text)
+        assert resp.status_code == 201, (label, resp.text)
         assert as_json(resp)["amount"] == 1000
 
 

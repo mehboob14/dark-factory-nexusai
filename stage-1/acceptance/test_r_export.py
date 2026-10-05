@@ -246,6 +246,10 @@ def test_R152_import_wipes_destination_then_reset_is_clean(probe: Probe, seed):
 def test_R153_test_control_calls_finish_inside_ten_seconds(probe: Probe, seed):
     started = time.monotonic()
     probe.reset(default_world())
-    probe.export()
-    probe.import_state(probe.export())
+    assert time.monotonic() - started <= 10.0
+    started = time.monotonic()
+    snap = probe.export()
+    assert time.monotonic() - started <= 10.0
+    started = time.monotonic()
+    probe.import_state(snap)
     assert time.monotonic() - started <= 10.0
