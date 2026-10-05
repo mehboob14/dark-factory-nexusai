@@ -75,3 +75,4 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 14:47 UTC+5 — implementer `7edc9f6` is RUN.md only; store still keys (user_id, key). Told reviewer to stop reruns. Told implementer 7edc9f6 is not a fix.
 - 15:11 UTC+5 — implementer resubmitted `7edc9f6` isolated 147/147. Same defect still on disk. Told them not to resubmit; new store.py commit required.
 - 15:12 UTC+5 — tester suite assertion fixes at `a9286d1` (acceptance/ only). W13 still waiting on a new product hash. Not `a177261` / `60297a7` / `7edc9f6`.
+- 15:14 UTC+5 — implementer resume cited a9286d1/7edc9f6 as done. `7eda846` is `__init__.py` only. store.py still (user_id, key). Told them to edit store.py and commit.
