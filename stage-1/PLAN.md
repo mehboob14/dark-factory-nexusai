@@ -1,0 +1,56 @@
+# Pocketful stage 1 — plan
+
+Start: 2026-10-05 13:08 UTC+5 (08:08 UTC)
+Finish: (open)
+
+Planned time: 2.5 hours. Cap: if still not accepted after 3.75 hours (1.5×), reviewer accepts the best revision that builds, starts, and claims stage 1 in isolated mode; remaining gaps are written into REQUIREMENTS.md and this plan.
+
+## Goal
+
+A complete stage-1 HTTP wallet/payments service in `C:\Development\darkfactory\band-work\result\stage-1` that meets every line of REQUIREMENTS.md, claims stage 1 on the harness in isolated mode, and does not implement stage 2+.
+
+## Decisions
+
+- In-memory single-process store with one mutex around mutations (D8).
+- bcrypt cost 4 (D9).
+- Payment objects include `settlement_id` (D2) and omit later-stage fields (D10).
+- Implementer chooses language. Prefer Go or Python (stdlib or FastAPI) for delivery speed and one-lock concurrency.
+- Dockerfile must not fail because REQUIREMENTS.md / PLAN.md / acceptance/ exist: copy only runtime files, or `.dockerignore` those planning paths.
+- Build to the specification, never to the shipped sample tests.
+
+## Work items (dependency order)
+
+| ID | Owner | Covers | Evidence |
+|---|---|---|---|
+| W1 | implementer | R1–R9: listen, health, Dockerfile, RUN.md | Container starts; `GET /health` 200 within 60 s |
+| W2 | implementer | R31–R41: reset/seed/validation | Reset 204; negative balance 422; seeded login works |
+| W3 | implementer | R42–R56: signup/login/tokens/GET /me | Auth table in §6; hashed passwords |
+| W4 | implementer | R69–R79, R26–R29: payments + conservation | Atomic debit/credit; insufficient_funds |
+| W5 | implementer | R80–R104, R28, R87–R99: requests | Create/pay/decline/cancel/list |
+| W6 | implementer | R105–R121, R30, R117–R120: splits | Exact §9 shares; zero-share request |
+| W7 | implementer | R122–R129: activity visibility | Public vs private; requests absent |
+| W8 | implementer | R57–R68: idempotency | 201/200/409; concurrent one-effect; 4xx does not claim |
+| W9 | implementer | R130–R142: settlements | Operator 403; net affordability; atomic batch |
+| W10 | implementer | R143–R153: export/import | Round-trip tokens, hashes, idempotent replays |
+| W11 | implementer | R10–R23, R154–R156: conventions + concurrency | No 5xx; 50-way conservation |
+| W12 | tester | R1–R156: acceptance suite in `stage-1/acceptance/` | One command; every R-line named |
+| W13 | tester | Harness sample + isolated claim | `claimed stage: 1`; stage 2 overshoot FAIL expected |
+| W14 | reviewer | Accept named commit | Isolated harness + acceptance; no stage-2 leak |
+
+Do not start stage 2 until W14 accepts.
+
+## Checks
+
+From `C:\Development\darkfactory\dark-factory-wearedevs`:
+
+```
+.venv\Scripts\python.exe -m harness run --track pocketful --repo C:\Development\darkfactory\band-work\result --stage 1 --out C:\Development\darkfactory\band-work\checks\s1-<unique-name>
+```
+
+Before accept, same with `--mode isolated`. Last line must be `claimed stage: 1`. Suite 2 overshoot is expected FAIL.
+
+If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright install chromium` (stage 1 has no UI; still install if the harness asks).
+
+## Log
+
+- 13:08 UTC+5 — coordinator read all four specs, wrote REQUIREMENTS.md (R1–R159, D1–D29) and this plan.
