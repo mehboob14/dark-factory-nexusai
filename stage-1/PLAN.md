@@ -58,3 +58,4 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 13:13 UTC+5 — implementer confirmed ready. Waking tester next; no work handoff until the remaining seats answer.
 - 13:14 UTC+5 — tester confirmed ready. Waking reviewer next.
 - 13:16 UTC+5 — reviewer confirmed ready. Dispatching implementer (W1–W11) and tester (W12) in parallel with the full contract and spec.
+- 13:23 UTC+5 — implementer started then hit a premature-close. Scaffolding (Dockerfile, RUN.md, requirements.txt) exists; server/ is empty. Told implementer to resume and commit incrementally.
