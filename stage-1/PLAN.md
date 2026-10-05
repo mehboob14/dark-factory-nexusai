@@ -81,3 +81,4 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 15:50 UTC+5 — tester re-announced suite `ad9b010` (already logged at 13:37). Latest suite commit remains `a9286d1`. W12 closed. Tester parked. Reviewer told this is not W14.
 - 15:56 UTC+5 — implementer `037d00b` removes the string/bool `malformed` branch so fixture balance uses `parse_amount` → `validation_failed` (422). Product tree otherwise unchanged. No isolated run on this hash yet. W14 still held.
 - 16:00 UTC+5 — isolated `s1-037d00b-isolated` completed 147/147, claimed stage 1, stage-2 overshoot FAIL. Provenance working-tree at note commit `1664674` (PLAN.md only vs `037d00b`). Dispatching W14 on product `037d00b`.
+- 16:04 UTC+5 — implementer restated stale `7bf0ce1` / suite `ad9b010`. Discarded a staged revert that re-keyed idempotency to (user_id, key). Working tree product restored. W14 remains `037d00b`.
