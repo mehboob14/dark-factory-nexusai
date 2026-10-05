@@ -138,3 +138,5 @@ Specs, requirements, check commands, acceptance suite path, and work-item sequen
 ## Log
 
 - **(intake)** — Coordinator read all four stage specs (stage-1.md through stage-4.md), reviewed REQUIREMENTS.md (R1–R159 complete), inherited service at `037d00b` which passed isolated 147/147 in prior band. Archived PLAN.md to PLAN-attempt-2.md. Writing fresh four-stage plan and waking seats now.
+- **(S1 verification)** — 13:48–13:59 — @reviewer ran harness (isolated): 147/147 pass, claimed stage 1; acceptance suite: 151/151 pass; no defects, no 5xx, no timeouts, no stage-2+ leak. **ACCEPT 037d00b**. 
+- **(S2 start)** — 13:59 — Stage-1 locked. Created stage-2 from stage-1, handed off to @implementer. @tester acceptance suites for stages 2–4 already complete and committed. Budget remaining: ~8 hours.
