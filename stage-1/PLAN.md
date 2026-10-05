@@ -57,3 +57,4 @@ If a run reports a missing browser: `.venv\Scripts\python.exe -m playwright inst
 - 13:12 UTC+5 — contract committed at `136a315106ae0954200a32d5ded8755abb0d8f40`. Implementer readiness requested.
 - 13:13 UTC+5 — implementer confirmed ready. Waking tester next; no work handoff until the remaining seats answer.
 - 13:14 UTC+5 — tester confirmed ready. Waking reviewer next.
+- 13:16 UTC+5 — reviewer confirmed ready. Dispatching implementer (W1–W11) and tester (W12) in parallel with the full contract and spec.
