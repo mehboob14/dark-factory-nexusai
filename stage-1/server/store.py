@@ -202,8 +202,6 @@ class Store:
                 return "validation_failed"
             if len(uid) > 64:
                 return "validation_failed"
-            if isinstance(balance, (str, bool)):
-                return "malformed"
             bal = parse_amount(balance)
             if bal is None or bal < 0:
                 return "validation_failed"
