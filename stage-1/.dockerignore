@@ -1,0 +1,7 @@
+REQUIREMENTS.md
+PLAN.md
+acceptance/
+.git
+.gitignore
+**/__pycache__
+**/*.pyc
