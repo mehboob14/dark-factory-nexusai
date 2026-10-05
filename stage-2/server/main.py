@@ -551,35 +551,45 @@ async def post_settlements(request: Request) -> JSONResponse:
 async def home(request: Request) -> Response:
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
-        html = """
+        html = """<!DOCTYPE html>
 <html>
-<head><title>Pocketful</title></head>
+<head><title>Pocketful</title><style>
+body { font-family: sans-serif; margin: 20px; }
+.balance-display { font-size: 24px; margin: 20px 0; }
+form { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+input, select, button { display: block; margin: 5px 0; padding: 5px; width: 200px; }
+button { width: auto; cursor: pointer; }
+.error { color: red; display: none; }
+.activity-item { border: 1px solid #ddd; margin: 5px 0; padding: 5px; }
+</style></head>
 <body>
-<h1>Wallet</h1>
-<p data-testid="wallet-balance" data-amount="0">0.00 EUR</p>
-<p data-testid="wallet-available" data-amount="0">0.00 EUR</p>
-<h2>Pay</h2>
-<form id="pay-form">
-    <input data-testid="pay-handle" type="text" placeholder="Handle" />
-    <input data-testid="pay-amount" type="text" placeholder="Amount" />
-    <input data-testid="pay-note" type="text" placeholder="Note" />
-    <select data-testid="pay-visibility"><option value="public">public</option><option value="private">private</option></select>
-    <button data-testid="pay-submit" type="submit">Pay</button>
-    <div data-testid="pay-error" style="display:none;"></div>
-</form>
-<h2>Request</h2>
-<form id="request-form">
-    <input data-testid="request-handle" type="text" placeholder="Handle" />
-    <input data-testid="request-amount" type="text" placeholder="Amount" />
-    <input data-testid="request-note" type="text" placeholder="Note" />
-    <button data-testid="request-submit" type="submit">Request</button>
-    <div data-testid="request-error" style="display:none;"></div>
-</form>
-<h2>Activity</h2>
-<div data-testid="activity-list"></div>
-<div data-testid="empty-activity">No activity</div>
 <div data-testid="current-user" style="display:none;"></div>
 <button data-testid="logout-button" style="display:none;">Logout</button>
+<h1>Wallet</h1>
+<div class="balance-display">
+  <div>Balance: <span data-testid="wallet-balance" data-amount="0">0.00 EUR</span></div>
+  <div>Available: <span data-testid="wallet-available" data-amount="0">0.00 EUR</span></div>
+</div>
+<h2>Send Payment</h2>
+<form id="pay-form">
+  <label>To: <input data-testid="pay-handle" type="text" placeholder="handle" /></label>
+  <label>Amount: <input data-testid="pay-amount" type="text" placeholder="0.00" /></label>
+  <label>Note: <input data-testid="pay-note" type="text" placeholder="" /></label>
+  <label>Visibility: <select data-testid="pay-visibility"><option value="public">public</option><option value="private">private</option></select></label>
+  <button data-testid="pay-submit" type="submit">Pay</button>
+  <div data-testid="pay-error" class="error"></div>
+</form>
+<h2>Request Payment</h2>
+<form id="request-form">
+  <label>From: <input data-testid="request-handle" type="text" placeholder="handle" /></label>
+  <label>Amount: <input data-testid="request-amount" type="text" placeholder="0.00" /></label>
+  <label>Note: <input data-testid="request-note" type="text" placeholder="" /></label>
+  <button data-testid="request-submit" type="submit">Request</button>
+  <div data-testid="request-error" class="error"></div>
+</form>
+<h2>Activity Feed</h2>
+<div data-testid="activity-list"></div>
+<div data-testid="empty-activity">No activity</div>
 </body>
 </html>
 """
@@ -595,45 +605,70 @@ async def home(request: Request) -> Response:
 @app.get("/requests")
 async def requests_page(request: Request) -> Response:
     accept = request.headers.get("accept", "")
-    if "text/html" in accept:
-        html = """
-<html>
-<head><title>Requests</title></head>
-<body>
-<h1>Requests</h1>
-<h2>Incoming</h2>
-<div data-testid="incoming-list"></div>
-<h2>Outgoing</h2>
-<div data-testid="outgoing-list"></div>
-<div data-testid="empty-requests">No requests</div>
-<div data-testid="request-error" style="display:none;"></div>
-</body>
-</html>
-"""
-        return html_response(html)
+
     uid = auth_user_id(request)
     if uid is None:
+        if "text/html" in accept:
+            return err(401, "unauthenticated")
         return err(401, "unauthenticated")
+
     direction = request.query_params.get("direction")
     status = request.query_params.get("status")
     limit = parse_query_int(request.query_params.get("limit"))
     offset = parse_query_int(request.query_params.get("offset"))
-    if limit is None or offset is None:
-        return err(422, "validation_failed")
-    if limit == 0:
+
+    if limit is None:
         limit = 50
-    if offset == 0:
+    if offset is None:
         offset = 0
-    if limit < 1 or limit > 200:
-        return err(422, "validation_failed")
-    if offset < 0:
+    if limit < 1 or limit > 200 or offset < 0:
         return err(422, "validation_failed")
     if direction and direction not in ("incoming", "outgoing"):
         return err(422, "validation_failed")
     if status and status not in ("pending", "paid", "declined", "cancelled"):
         return err(422, "validation_failed")
+
     with store._lock:
         result = store.list_requests(uid, direction, status, limit, offset)
+
+    if "text/html" in accept:
+        html = """<!DOCTYPE html>
+<html>
+<head><title>Requests</title><style>
+body { font-family: sans-serif; margin: 20px; }
+.request-item { border: 1px solid #ddd; margin: 5px 0; padding: 5px; }
+button { margin: 2px; padding: 2px 5px; cursor: pointer; }
+</style></head>
+<body>
+<h1>Money Requests</h1>
+<h2>Incoming Requests</h2>
+<div data-testid="incoming-list">""" + "".join(
+            f'<div data-testid="request-item-{r["request_id"]}" data-status="{r["status"]}" class="request-item">'
+            f'{r["requester_handle"]} → {r["payer_handle"]}: '
+            f'<span data-testid="request-amount-{r["request_id"]}">{r["amount"]}</span> {r["note"]}'
+            f'{"<button data-testid=\"request-pay-" + r["request_id"] + "\">Pay</button>" if r["status"] == "pending" else ""}'
+            f'{"<button data-testid=\"request-decline-" + r["request_id"] + "\">Decline</button>" if r["status"] == "pending" else ""}'
+            f'</div>'
+            for r in result.get("requests", []) if r.get("status") == "pending" and r.get("payer_id") == uid
+        ) + """
+</div>
+<h2>Outgoing Requests</h2>
+<div data-testid="outgoing-list">""" + "".join(
+            f'<div data-testid="request-item-{r["request_id"]}" data-status="{r["status"]}" class="request-item">'
+            f'{r["requester_handle"]} → {r["payer_handle"]}: '
+            f'<span data-testid="request-amount-{r["request_id"]}">{r["amount"]}</span> {r["note"]}'
+            f'{"<button data-testid=\"request-cancel-" + r["request_id"] + "\">Cancel</button>" if r["status"] == "pending" else ""}'
+            f'</div>'
+            for r in result.get("requests", []) if r.get("status") == "pending" and r.get("requester_id") == uid
+        ) + """
+</div>
+<div data-testid="empty-requests" style="display:""" + ("none" if result.get("requests") else "block") + """;>No requests</div>
+<div data-testid="request-error" style="display:none;"></div>
+</body>
+</html>
+"""
+        return html_response(html)
+
     return ok_json(200, result)
 
 
@@ -641,18 +676,26 @@ async def requests_page(request: Request) -> Response:
 async def split_page(request: Request) -> Response:
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
-        html = """
+        html = """<!DOCTYPE html>
 <html>
-<head><title>Split</title></head>
+<head><title>Split</title><style>
+body { font-family: sans-serif; margin: 20px; }
+form { padding: 10px; border: 1px solid #ccc; }
+input, button { display: block; margin: 5px 0; padding: 5px; width: 300px; }
+button { width: auto; cursor: pointer; }
+#split-preview { margin: 10px 0; padding: 10px; border: 1px solid #eee; }
+.split-share { margin: 5px 0; }
+.error { color: red; display: none; }
+</style></head>
 <body>
-<h1>Split</h1>
+<h1>Split Payment</h1>
 <form id="split-form">
-    <input data-testid="split-amount" type="text" placeholder="Amount" />
-    <input data-testid="split-handles" type="text" placeholder="Handles (comma-separated)" />
-    <input data-testid="split-note" type="text" placeholder="Note" />
-    <button data-testid="split-submit" type="submit">Split</button>
-    <div data-testid="split-preview"></div>
-    <div data-testid="split-error" style="display:none;"></div>
+  <label>Amount: <input data-testid="split-amount" type="text" placeholder="0.00" /></label>
+  <label>Participants (comma-separated handles): <input data-testid="split-handles" type="text" placeholder="alice,bob,charlie" /></label>
+  <label>Note: <input data-testid="split-note" type="text" placeholder="" /></label>
+  <div data-testid="split-preview" id="split-preview"></div>
+  <button data-testid="split-submit" type="submit">Split</button>
+  <div data-testid="split-error" class="error"></div>
 </form>
 </body>
 </html>
@@ -665,18 +708,26 @@ async def split_page(request: Request) -> Response:
 async def signup_page(request: Request) -> Response:
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
-        html = """
+        html = """<!DOCTYPE html>
 <html>
-<head><title>Signup</title></head>
+<head><title>Sign Up</title><style>
+body { font-family: sans-serif; margin: 20px; }
+form { padding: 20px; border: 1px solid #ccc; max-width: 300px; }
+input, button { display: block; margin: 10px 0; padding: 8px; width: 100%; box-sizing: border-box; }
+button { width: auto; cursor: pointer; }
+.error { color: red; display: none; }
+a { display: block; margin-top: 20px; }
+</style></head>
 <body>
-<h1>Sign Up</h1>
+<h1>Create Account</h1>
 <form id="signup-form">
-    <input data-testid="signup-email" type="email" placeholder="Email" />
-    <input data-testid="signup-password" type="password" placeholder="Password" />
-    <input data-testid="signup-display-name" type="text" placeholder="Display Name" />
-    <button data-testid="signup-submit" type="submit">Sign Up</button>
-    <div data-testid="auth-error" style="display:none;"></div>
+  <label>Email: <input data-testid="signup-email" type="email" placeholder="user@example.com" /></label>
+  <label>Password: <input data-testid="signup-password" type="password" placeholder="(min 8 characters)" /></label>
+  <label>Display Name: <input data-testid="signup-display-name" type="text" placeholder="Your Name" /></label>
+  <button data-testid="signup-submit" type="submit">Sign Up</button>
+  <div data-testid="auth-error" class="error"></div>
 </form>
+<p><a href="/login">Already have an account? Log in</a></p>
 </body>
 </html>
 """
@@ -688,17 +739,29 @@ async def signup_page(request: Request) -> Response:
 async def login_page(request: Request) -> Response:
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
-        html = """
+        html = """<!DOCTYPE html>
 <html>
-<head><title>Login</title></head>
+<head><title>Log In</title><style>
+body { font-family: sans-serif; margin: 20px; }
+form { padding: 20px; border: 1px solid #ccc; max-width: 300px; }
+input, button { display: block; margin: 10px 0; padding: 8px; width: 100%; box-sizing: border-box; }
+button { width: auto; cursor: pointer; }
+.error { color: red; display: none; }
+.nav { display: none; }
+.nav.shown { display: block; margin-top: 20px; }
+a { display: block; margin: 5px 0; }
+</style></head>
 <body>
 <h1>Log In</h1>
 <form id="login-form">
-    <input data-testid="login-email" type="email" placeholder="Email" />
-    <input data-testid="login-password" type="password" placeholder="Password" />
-    <button data-testid="login-submit" type="submit">Log In</button>
-    <div data-testid="auth-error" style="display:none;"></div>
+  <label>Email: <input data-testid="login-email" type="email" placeholder="user@example.com" /></label>
+  <label>Password: <input data-testid="login-password" type="password" placeholder="" /></label>
+  <button data-testid="login-submit" type="submit">Log In</button>
+  <div data-testid="auth-error" class="error"></div>
 </form>
+<div class="nav">
+  <p>Don't have an account? <a href="/signup">Sign up</a></p>
+</div>
 <div data-testid="current-user" style="display:none;"></div>
 <div data-testid="current-handle" style="display:none;"></div>
 </body>
