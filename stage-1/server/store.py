@@ -101,7 +101,7 @@ class Store:
         self.splits: dict[str, Split] = {}
         self.settlements: dict[str, Settlement] = {}
         self.settlement_operator_ids: set[str] = set()
-        self.idempotency: dict[tuple[str, str], IdempotencyRecord] = {}
+        self.idempotency: dict[tuple[str, str, str, str], IdempotencyRecord] = {}
 
     def mark_ready(self) -> None:
         with self._lock:
@@ -360,14 +360,14 @@ class Store:
             "splits": [copy.deepcopy(s.__dict__) for s in self.splits.values()],
             "settlements": [copy.deepcopy(st.__dict__) for st in self.settlements.values()],
             "idempotency": {
-                f"{uid}\0{key}": {
+                f"{uid}\0{key}\0{method}\0{path}": {
                     "method": rec.method,
                     "path": rec.path,
                     "body": rec.body,
                     "response": rec.response,
                     "http_status": rec.http_status,
                 }
-                for (uid, key), rec in self.idempotency.items()
+                for (uid, key, method, path), rec in self.idempotency.items()
             },
         }
 
@@ -445,11 +445,18 @@ class Store:
         for composite, rec in idem.items():
             if not isinstance(rec, dict):
                 return "validation_failed"
-            parts = composite.split("\0", 1)
-            if len(parts) != 2:
+            parts = composite.split("\0")
+            if len(parts) not in (2, 4):
                 return "validation_failed"
-            uid, key = parts
-            self.idempotency[(uid, key)] = IdempotencyRecord(
+            if len(parts) == 2:
+                uid, key = parts
+                method = rec.get("method")
+                path = rec.get("path")
+                if not isinstance(method, str) or not isinstance(path, str):
+                    return "validation_failed"
+            else:
+                uid, key, method, path = parts
+            self.idempotency[(uid, key, method, path)] = IdempotencyRecord(
                 method=rec["method"],
                 path=rec["path"],
                 body=rec["body"],
@@ -473,17 +480,17 @@ class Store:
             return "missing_idempotency_key", None, False
         if len(key) < 1 or len(key) > 255:
             return "validation_failed", None, False
-        rec = self.idempotency.get((user_id, key))
+        rec = self.idempotency.get((user_id, key, method, path))
         if rec is None:
-            return None, None, True
-        if rec.method != method or rec.path != path:
             return None, None, True
         if not json_equal(rec.body, body):
             return "idempotency_key_reuse", None, False
         return "replay", rec, False
 
     def save_idempotency(self, user_id: str, key: str, method: str, path: str, body: Any, response: Any, status: int) -> None:
-        self.idempotency[(user_id, key)] = IdempotencyRecord(method, path, copy.deepcopy(body), copy.deepcopy(response), status)
+        self.idempotency[(user_id, key, method, path)] = IdempotencyRecord(
+            method, path, copy.deepcopy(body), copy.deepcopy(response), status
+        )
 
     def signup(self, email: str, password: str, display_name: str) -> tuple[str, dict[str, Any] | None]:
         if not valid_email(email):
